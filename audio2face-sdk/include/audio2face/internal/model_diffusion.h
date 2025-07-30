@@ -1,0 +1,169 @@
+// SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: MIT
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+#pragma once
+
+#include "audio2x/internal/inference_engine.h"
+#include "audio2x/internal/tensor.h"
+#include "audio2face/model_diffusion.h"
+#include "audio2face/internal/model_shared.h"
+
+namespace nva2f {
+
+namespace IDiffusionModel {
+
+class InferenceInputBuffers : public IInferenceInputBuffers {
+  public:
+    std::error_code Init(const NetworkInfo& networkInfo, std::size_t count = 1);
+
+    std::size_t GetCount() const override;
+    std::size_t GetFrameCount() const override;
+
+    // Return the full tensors, used to create bindings.
+    nva2x::DeviceTensorFloatView GetEmotionTensor(std::size_t count = 0) override;
+    nva2x::DeviceTensorFloatConstView GetEmotionTensor(std::size_t count = 0) const override;
+    nva2x::DeviceTensorFloatView GetInputTensor(std::size_t count = 0) override;
+    nva2x::DeviceTensorFloatConstView GetInputTensor(std::size_t count = 0) const override;
+    nva2x::DeviceTensorFloatView GetIdentityTensor(std::size_t count = 0) override;
+    nva2x::DeviceTensorFloatConstView GetIdentityTensor(std::size_t count = 0) const override;
+    nva2x::DeviceTensorFloatView GetNoiseTensor(std::size_t count = 0) override;
+    nva2x::DeviceTensorFloatConstView GetNoiseTensor(std::size_t count = 0) const override;
+
+    // Return views to specific parts of the tensors, used to read/write data.
+    nva2x::DeviceTensorFloatView GetEmotions(std::size_t frameIndex, std::size_t index = 0) override;
+    nva2x::DeviceTensorFloatView GetInput(std::size_t index = 0) override;
+    nva2x::DeviceTensorFloatView GetIdentity(std::size_t index = 0) override;
+    nva2x::DeviceTensorFloatView GetNoise(std::size_t index = 0) override;
+
+    void Destroy() override;
+
+  private:
+    nva2x::DeviceTensorFloat _emotion;
+    nva2x::DeviceTensorFloat _input;
+    nva2x::DeviceTensorFloat _identity;
+    nva2x::DeviceTensorFloat _noise;
+
+    std::size_t _count{0};
+    std::size_t _frameCount{0};
+    std::size_t _emotionSize{0};
+    std::size_t _inputSize{0};
+    std::size_t _identitySize{0};
+    std::size_t _noiseSize{0};
+  };
+
+  // This can be shared in other diffusion models.
+  class InferenceStateBuffers : public IInferenceStateBuffers {
+  public:
+    std::error_code Init(const NetworkInfo& networkInfo, std::size_t count = 1);
+
+    std::size_t GetCount() const override;
+
+    // Return the full tensors, used to create bindings.
+    nva2x::DeviceTensorFloatView GetInputGRUStateTensor(std::size_t count = 0) override;
+    nva2x::DeviceTensorFloatConstView GetInputGRUStateTensor(std::size_t count = 0) const override;
+    nva2x::DeviceTensorFloatView GetOutputGRUStateTensor(std::size_t count = 0) override;
+    nva2x::DeviceTensorFloatConstView GetOutputGRUStateTensor(std::size_t count = 0) const override;
+
+    // GRU state is interleaved, so a full view for a given index can't be provided.
+    // Instead, a function copying the data from output to input is provided.
+    std::error_code CopyOutputToInputGRUState(cudaStream_t cudaStream, std::size_t index = 0) override;
+    // GRU state is interleaved, so a full view for a given index can't be provided.
+    // Instead, a function zeroing the state is provided.
+    std::error_code Reset(cudaStream_t cudaStream, std::size_t index = 0) override;
+
+    std::error_code Swap() override;
+
+    void Destroy() override;
+
+  private:
+    nva2x::DeviceTensorFloat _inputGRU;
+    nva2x::DeviceTensorFloat _outputGRU;
+
+    std::size_t _count{0};
+    std::size_t _gruSize{0};
+    std::size_t _nbSlices{0};
+    std::size_t _sliceSize{0};
+  };
+
+  class InferenceOutputBuffers : public IInferenceOutputBuffers {
+  public:
+    std::error_code Init(const NetworkInfo& networkInfo, std::size_t count = 1);
+
+    std::size_t GetCount() const override;
+    std::size_t GetFrameCount() const override;
+
+    nva2x::DeviceTensorFloatView GetResultTensor(std::size_t count = 0) override;
+    nva2x::DeviceTensorFloatConstView GetResultTensor(std::size_t count = 0) const override;
+
+    nva2x::DeviceTensorFloatView GetInferenceResult(std::size_t index = 0) override;
+    nva2x::DeviceTensorFloatConstView GetInferenceResult(std::size_t index = 0) const override;
+    nva2x::DeviceTensorFloatConstView GetInferenceResultSkin(std::size_t frameIndex, std::size_t index = 0) const override;
+    nva2x::DeviceTensorFloatConstView GetInferenceResultTongue(std::size_t frameIndex, std::size_t index = 0) const override;
+    nva2x::DeviceTensorFloatConstView GetInferenceResultJaw(std::size_t frameIndex, std::size_t index = 0) const override;
+    nva2x::DeviceTensorFloatConstView GetInferenceResultEyes(std::size_t frameIndex, std::size_t index = 0) const override;
+
+    nva2x::TensorBatchInfo GetSkinBatchInfo(std::size_t frameIndex) const override;
+    nva2x::TensorBatchInfo GetTongueBatchInfo(std::size_t frameIndex) const override;
+    nva2x::TensorBatchInfo GetJawBatchInfo(std::size_t frameIndex) const override;
+    nva2x::TensorBatchInfo GetEyesBatchInfo(std::size_t frameIndex) const override;
+
+    void Destroy() override;
+
+  private:
+    std::size_t _count{0};
+    std::size_t _frameCount{0};
+    std::size_t _goodFramesOffset{0};
+    std::size_t _goodFramesCount{0};
+    ISharedModel::GeometryInferenceOutputBuffers _buffers;
+  };
+
+  class ResultBuffers : public ISharedModel::GeometryResultBuffers {
+  public:
+    std::error_code Init(const NetworkInfo& networkInfo, std::size_t count = 1);
+  };
+
+  InferenceInputBuffers* CreateInferenceInputBuffers(const NetworkInfo& networkInfo, std::size_t count);
+  InferenceStateBuffers* CreateInferenceStateBuffers(const NetworkInfo& networkInfo, std::size_t count);
+  InferenceOutputBuffers* CreateInferenceOutputBuffers(const NetworkInfo& networkInfo, std::size_t count);
+  ResultBuffers* CreateResultBuffers(const NetworkInfo& networkInfo, std::size_t count);
+
+  const nva2x::BufferBindingsDescription& GetBindingsDescription();
+  nva2x::BufferBindings* CreateBindings();
+
+} // namespace IDiffusionModel
+
+IDiffusionModel::IInferenceInputBuffers* CreateInferenceInputBuffersForDiffusionModel_INTERNAL(
+  const IDiffusionModel::NetworkInfo& networkInfo, std::size_t count
+  );
+IDiffusionModel::IInferenceStateBuffers* CreateInferenceStateBuffersForDiffusionModel_INTERNAL(
+  const IDiffusionModel::NetworkInfo& networkInfo, std::size_t count
+  );
+IDiffusionModel::IInferenceOutputBuffers* CreateInferenceOutputBuffersForDiffusionModel_INTERNAL(
+  const IDiffusionModel::NetworkInfo& networkInfo, std::size_t count
+  );
+IDiffusionModel::IResultBuffers* CreateResultBuffersForDiffusionModel_INTERNAL(
+  const IDiffusionModel::NetworkInfo& networkInfo, std::size_t count
+  );
+
+const nva2x::IBufferBindingsDescription& GetBindingsDescriptionForDiffusionModel_INTERNAL();
+
+nva2x::IBufferBindings* CreateBindingsForDiffusionModel_INTERNAL();
+
+} // namespace nva2f
