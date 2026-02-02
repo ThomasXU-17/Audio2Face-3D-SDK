@@ -142,35 +142,62 @@ GET /api/download/{job_id}
 
 ## 输出格式
 
-推理结果以 JSON 格式返回，包含每一帧的面部几何数据：
+推理结果以 JSON 格式返回，兼容 Apple ARKit 的 52 个 FACS 混合形状（blendshapes）格式：
 
 ```json
 {
-  "model_id": "mark",
-  "model_type": "regression",
-  "audio_file": "/path/to/audio.wav",
-  "total_frames": 240,
-  "duration_seconds": 4.0,
-  "fps": 60,
-  "sample_rate": 16000,
-  "inference_time_ms": 2938,
-  "metadata": {
-    "skin_geometry_size": 184560,
-    "tongue_geometry_size": 16806,
-    "jaw_transform_size": 16,
-    "eyes_rotation_size": 6
-  },
-  "frames": [
-    {
-      "frame_index": 0,
-      "timestamp": 0.0,
-      "skin_geometry": [/* 184560 个浮点数，表示皮肤网格顶点 */],
-      "tongue_geometry": [/* 16806 个浮点数，表示舌头网格顶点 */],
-      "jaw_transform": [/* 16 个浮点数，表示下巴变换矩阵 (4x4) */],
-      "eyes_rotation": [/* 6 个浮点数，表示眼睛旋转 */]
-    }
-  ]
+  "exportFps": 60.0,
+  "trackPath": "/path/to/audio.wav",
+  "numPoses": 68,
+  "numFrames": 240,
+  "facsNames": [
+    "eyeBlinkLeft",
+    "eyeLookDownLeft",
+    "eyeLookInLeft",
+    "...",
+    "tongueOut",
+    "tongueTipUp",
+    "..."
+  ],
+  "weightMat": [
+    [0.015, 0.0, 0.0, ...],
+    [0.023, 0.001, 0.0, ...],
+    ...
+  ],
+  "joints": ["jaw", "eye_L", "eye_R"],
+  "rotations": [],
+  "translations": []
 }
+```
+
+### 输出字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `exportFps` | float | 输出帧率 (默认 60) |
+| `trackPath` | string | 音频文件路径 |
+| `numPoses` | int | 混合形状数量 (52 皮肤 + 16 舌头 = 68) |
+| `numFrames` | int | 总帧数 |
+| `facsNames` | array | 52 个 FACS 混合形状名称 + 16 个舌头形状 |
+| `weightMat` | 2D array | [numFrames][numPoses] 的混合形状权重矩阵 |
+| `joints` | array | 关节名称列表 |
+| `rotations` | array | 关节旋转数据（预留） |
+| `translations` | array | 关节平移数据（预留） |
+
+### FACS 混合形状列表
+
+皮肤混合形状 (52个):
+- 眼睛: eyeBlinkLeft/Right, eyeLookDown/In/Out/UpLeft/Right, eyeSquintLeft/Right, eyeWideLeft/Right
+- 下巴: jawForward, jawLeft, jawRight, jawOpen
+- 嘴巴: mouthClose, mouthFunnel, mouthPucker, mouthLeft/Right, mouthSmile/Frown/Dimple/Stretch/Press/Roll/Shrug/LowerDown/UpperUpLeft/Right
+- 眉毛: browDownLeft/Right, browInnerUp, browOuterUpLeft/Right
+- 脸颊: cheekPuff, cheekSquintLeft/Right
+- 鼻子: noseSneerLeft/Right
+- 舌头: tongueOut
+
+舌头混合形状 (16个):
+- tongueTipUp/Down/Left/Right, tongueRollUp/Down/Left/Right
+- tongueUp/Down/Left/Right/In/Stretch/Wide/Narrow
 ```
 
 ## 可用模型

@@ -3,7 +3,7 @@
 //
 // Audio2Face Web Inference Tool
 // This program runs offline inference with command-line arguments for model selection
-// and audio input, outputting results in JSON format.
+// and audio input, outputting results in JSON format compatible with a2f_export format.
 
 #include "audio2face/audio2face.h"
 #include "audio2emotion/audio2emotion.h"
@@ -138,62 +138,78 @@ std::map<std::string, ModelConfig> getModelConfigs(const std::string& dataDir) {
 
 
 //
-// Geometry executor data structure
+// Blendshape executor data structure
 //
 
-struct GeometryExecutorData {
+struct BlendshapeExecutorData {
   nva2x::ICudaStream* cudaStream{nullptr};
   nva2x::IAudioAccumulator* audioAccumulator{nullptr};
   nva2x::IEmotionAccumulator* emotionAccumulator{nullptr};
-  nva2f::IGeometryExecutor* executor{nullptr};
+  nva2f::IBlendshapeExecutor* executor{nullptr};
+  nva2f::IBlendshapeSolver* skinSolver{nullptr};
+  nva2f::IBlendshapeSolver* tongueSolver{nullptr};
   std::any ownedData;
 };
 
 
 //
-// Create geometry executors
+// Create blendshape executors
 //
 
-GeometryExecutorData CreateRegressionGeometryExecutor(const std::string& modelPath, int fps = 60) {
+BlendshapeExecutorData CreateRegressionBlendshapeExecutor(const std::string& modelPath, int fps = 60) {
   auto bundle = ToSharedPtr(
-    nva2f::ReadRegressionGeometryExecutorBundle(
+    nva2f::ReadRegressionBlendshapeSolveExecutorBundle(
       1,
       modelPath.c_str(),
       nva2f::IGeometryExecutor::ExecutionOption::All,
+      false,  // useGpuSolver = false for host results
       fps, 1,
+      nullptr,
       nullptr
     )
   );
   CHECK_ERROR(bundle);
 
-  GeometryExecutorData data;
+  BlendshapeExecutorData data;
   data.cudaStream = &bundle->GetCudaStream();
   data.audioAccumulator = &bundle->GetAudioAccumulator(0);
   data.emotionAccumulator = &bundle->GetEmotionAccumulator(0);
   data.executor = &bundle->GetExecutor();
+  
+  // Get skin and tongue solvers for pose names
+  CHECK_RESULT(nva2f::GetExecutorSkinSolver(*data.executor, 0, &data.skinSolver));
+  CHECK_RESULT(nva2f::GetExecutorTongueSolver(*data.executor, 0, &data.tongueSolver));
+  
   data.ownedData = std::move(bundle);
 
   return data;
 }
 
-GeometryExecutorData CreateDiffusionGeometryExecutor(const std::string& modelPath, int identityIndex = 0) {
+BlendshapeExecutorData CreateDiffusionBlendshapeExecutor(const std::string& modelPath, int identityIndex = 0) {
   auto bundle = ToSharedPtr(
-    nva2f::ReadDiffusionGeometryExecutorBundle(
+    nva2f::ReadDiffusionBlendshapeSolveExecutorBundle(
       1,
       modelPath.c_str(),
       nva2f::IGeometryExecutor::ExecutionOption::All,
+      false,  // useGpuSolver = false for host results
       identityIndex,
       false,
+      nullptr,
       nullptr
     )
   );
   CHECK_ERROR(bundle);
 
-  GeometryExecutorData data;
+  BlendshapeExecutorData data;
   data.cudaStream = &bundle->GetCudaStream();
   data.audioAccumulator = &bundle->GetAudioAccumulator(0);
   data.emotionAccumulator = &bundle->GetEmotionAccumulator(0);
   data.executor = &bundle->GetExecutor();
+  
+  // Get skin and tongue solvers for pose names
+  CHECK_RESULT(nva2f::GetExecutorSkinSolver(*data.executor, 0, &data.skinSolver));
+  CHECK_RESULT(nva2f::GetExecutorTongueSolver(*data.executor, 0, &data.tongueSolver));
+  
   data.ownedData = std::move(bundle);
 
   return data;
@@ -230,23 +246,15 @@ UniquePtr<nva2e::IEmotionExecutor> CreateEmotionExecutor(
 // Result storage
 //
 
-struct FrameResult {
-  std::size_t frameIndex;
-  double timestamp;
-  std::vector<float> skinGeometry;
-  std::vector<float> tongueGeometry;
-  std::vector<float> jawTransform;
-  std::vector<float> eyesRotation;
-};
-
 struct InferenceResults {
-  std::string modelId;
-  std::string modelType;
   std::string audioFile;
-  int sampleRate;
   int fps;
   double duration;
-  std::vector<FrameResult> frames;
+  std::vector<std::string> facsNames;
+  std::vector<std::vector<float>> weightMat;  // [numFrames][numPoses]
+  std::vector<std::string> joints;
+  std::vector<std::vector<float>> rotations;  // Currently empty
+  std::vector<std::vector<float>> translations;  // Currently empty
 };
 
 
@@ -261,8 +269,6 @@ InferenceResults RunOfflineInference(
   int fps = 60
 ) {
   InferenceResults results;
-  results.modelId = modelId;
-  results.modelType = config.type;
   results.audioFile = audioPath;
   results.fps = fps;
 
@@ -270,7 +276,6 @@ InferenceResults RunOfflineInference(
   int sampleRate;
   double duration;
   auto audioBuffer = readAudio(audioPath, sampleRate, duration);
-  results.sampleRate = sampleRate;
   results.duration = duration;
   
   if (audioBuffer.empty()) {
@@ -278,88 +283,78 @@ InferenceResults RunOfflineInference(
     exit(1);
   }
 
-  // Create geometry executor based on model type
-  GeometryExecutorData geometryData;
+  // Create blendshape executor based on model type
+  BlendshapeExecutorData blendshapeData;
   if (config.type == "regression") {
-    geometryData = CreateRegressionGeometryExecutor(config.modelPath, fps);
+    blendshapeData = CreateRegressionBlendshapeExecutor(config.modelPath, fps);
   } else {
-    geometryData = CreateDiffusionGeometryExecutor(config.modelPath);
+    blendshapeData = CreateDiffusionBlendshapeExecutor(config.modelPath);
   }
 
   // Create emotion executor
   auto emotionExecutor = CreateEmotionExecutor(
     config.emotionModelPath,
-    geometryData.cudaStream->Data(),
-    *geometryData.audioAccumulator
+    blendshapeData.cudaStream->Data(),
+    *blendshapeData.audioAccumulator
   );
 
-  // Get geometry sizes for pre-allocation
-  const auto skinSize = geometryData.executor->GetSkinGeometrySize();
-  const auto tongueSize = geometryData.executor->GetTongueGeometrySize();
-  const auto jawSize = geometryData.executor->GetJawTransformSize();
-  const auto eyesSize = geometryData.executor->GetEyesRotationSize();
+  // Get pose names from skin solver
+  CHECK_ERROR(blendshapeData.skinSolver);
+  const int numSkinPoses = blendshapeData.skinSolver->NumBlendshapePoses();
+  std::cerr << "Skin blendshapes: " << numSkinPoses << std::endl;
+  
+  for (int i = 0; i < numSkinPoses; ++i) {
+    const char* poseName = blendshapeData.skinSolver->GetPoseName(i);
+    if (poseName) {
+      results.facsNames.push_back(poseName);
+    }
+  }
+  
+  // Add tongue pose if available
+  if (blendshapeData.tongueSolver) {
+    const int numTonguePoses = blendshapeData.tongueSolver->NumBlendshapePoses();
+    std::cerr << "Tongue blendshapes: " << numTonguePoses << std::endl;
+    for (int i = 0; i < numTonguePoses; ++i) {
+      const char* poseName = blendshapeData.tongueSolver->GetPoseName(i);
+      if (poseName) {
+        results.facsNames.push_back(poseName);
+      }
+    }
+  }
 
-  std::cerr << "Geometry sizes - Skin: " << skinSize 
-            << ", Tongue: " << tongueSize 
-            << ", Jaw: " << jawSize 
-            << ", Eyes: " << eyesSize << std::endl;
+  // Set up default joints
+  results.joints = {"jaw", "eye_L", "eye_R"};
 
-  // Set up geometry callback to collect results
+  // Set up callback to collect results
   struct CallbackData {
     InferenceResults* results;
-    std::size_t skinSize;
-    std::size_t tongueSize;
-    std::size_t jawSize;
-    std::size_t eyesSize;
-    cudaStream_t stream;
+    std::size_t weightCount;
   };
   
-  CallbackData callbackData{&results, skinSize, tongueSize, jawSize, eyesSize, geometryData.cudaStream->Data()};
+  CallbackData callbackData{&results, blendshapeData.executor->GetWeightCount()};
   
-  auto geometryCallback = [](void* userdata, const nva2f::IGeometryExecutor::Results& res) {
+  auto hostCallback = [](
+    void* userdata, 
+    const nva2f::IBlendshapeExecutor::HostResults& res,
+    std::error_code errorCode
+  ) {
+    if (errorCode) {
+      std::cerr << "Error in callback: " << errorCode.message() << std::endl;
+      return;
+    }
+    
     auto& data = *static_cast<CallbackData*>(userdata);
     
-    FrameResult frame;
-    frame.frameIndex = data.results->frames.size();
-    frame.timestamp = static_cast<double>(res.timeStampCurrentFrame) / 1000000.0;  // Convert to seconds
-    
-    // Copy skin geometry from GPU to CPU
-    if (res.skinGeometry.Data() && data.skinSize > 0) {
-      frame.skinGeometry.resize(data.skinSize);
-      cudaMemcpyAsync(frame.skinGeometry.data(), res.skinGeometry.Data(), 
-                      data.skinSize * sizeof(float), cudaMemcpyDeviceToHost, res.skinCudaStream);
-      cudaStreamSynchronize(res.skinCudaStream);
+    // Copy weights to result
+    std::vector<float> frameWeights(res.weights.Size());
+    for (std::size_t i = 0; i < res.weights.Size(); ++i) {
+      frameWeights[i] = res.weights.Data()[i];
     }
     
-    // Copy tongue geometry
-    if (res.tongueGeometry.Data() && data.tongueSize > 0) {
-      frame.tongueGeometry.resize(data.tongueSize);
-      cudaMemcpyAsync(frame.tongueGeometry.data(), res.tongueGeometry.Data(),
-                      data.tongueSize * sizeof(float), cudaMemcpyDeviceToHost, res.tongueCudaStream);
-      cudaStreamSynchronize(res.tongueCudaStream);
-    }
-    
-    // Copy jaw transform
-    if (res.jawTransform.Data() && data.jawSize > 0) {
-      frame.jawTransform.resize(data.jawSize);
-      cudaMemcpyAsync(frame.jawTransform.data(), res.jawTransform.Data(),
-                      data.jawSize * sizeof(float), cudaMemcpyDeviceToHost, res.jawCudaStream);
-      cudaStreamSynchronize(res.jawCudaStream);
-    }
-    
-    // Copy eyes rotation
-    if (res.eyesRotation.Data() && data.eyesSize > 0) {
-      frame.eyesRotation.resize(data.eyesSize);
-      cudaMemcpyAsync(frame.eyesRotation.data(), res.eyesRotation.Data(),
-                      data.eyesSize * sizeof(float), cudaMemcpyDeviceToHost, res.eyesCudaStream);
-      cudaStreamSynchronize(res.eyesCudaStream);
-    }
-    
-    data.results->frames.push_back(std::move(frame));
-    return true;
+    data.results->weightMat.push_back(std::move(frameWeights));
   };
   
-  CHECK_RESULT(geometryData.executor->SetResultsCallback(geometryCallback, &callbackData));
+  CHECK_RESULT(blendshapeData.executor->SetResultsCallback(hostCallback, &callbackData));
 
   // Connect emotion executor to emotion accumulator
   auto emotionCallback = [](void* userdata, const nva2e::IEmotionExecutor::Results& res) {
@@ -367,79 +362,55 @@ InferenceResults RunOfflineInference(
     CHECK_RESULT(emotionAccumulator.Accumulate(res.timeStampCurrentFrame, res.emotions, res.cudaStream));
     return true;
   };
-  CHECK_RESULT(emotionExecutor->SetResultsCallback(emotionCallback, geometryData.emotionAccumulator));
+  CHECK_RESULT(emotionExecutor->SetResultsCallback(emotionCallback, blendshapeData.emotionAccumulator));
 
   // Accumulate all audio
   std::cerr << "Accumulating audio data..." << std::endl;
   CHECK_RESULT(
-    geometryData.audioAccumulator->Accumulate(
+    blendshapeData.audioAccumulator->Accumulate(
       nva2x::HostTensorFloatConstView{audioBuffer.data(), audioBuffer.size()},
-      geometryData.cudaStream->Data()
+      blendshapeData.cudaStream->Data()
     )
   );
-  CHECK_RESULT(geometryData.audioAccumulator->Close());
+  CHECK_RESULT(blendshapeData.audioAccumulator->Close());
 
   // Process all emotion
   std::cerr << "Processing emotions..." << std::endl;
   while (nva2x::GetNbReadyTracks(*emotionExecutor) > 0) {
     CHECK_RESULT(emotionExecutor->Execute(nullptr));
   }
-  CHECK_RESULT(geometryData.emotionAccumulator->Close());
+  CHECK_RESULT(blendshapeData.emotionAccumulator->Close());
 
-  // Process all geometry
-  std::cerr << "Processing geometry..." << std::endl;
-  while (nva2x::GetNbReadyTracks(*geometryData.executor)) {
-    CHECK_RESULT(geometryData.executor->Execute(nullptr));
+  // Process all blendshapes
+  std::cerr << "Processing blendshapes..." << std::endl;
+  while (nva2x::GetNbReadyTracks(*blendshapeData.executor)) {
+    CHECK_RESULT(blendshapeData.executor->Execute(nullptr));
   }
+  
+  // Wait for async operations to complete
+  CHECK_RESULT(blendshapeData.executor->Wait(0));
 
-  std::cerr << "Processed " << results.frames.size() << " frames." << std::endl;
+  std::cerr << "Processed " << results.weightMat.size() << " frames." << std::endl;
   return results;
 }
 
 
 //
-// JSON output
+// JSON output in a2f_export format
 //
 
 json ResultsToJson(const InferenceResults& results) {
   json j;
   
-  j["model_id"] = results.modelId;
-  j["model_type"] = results.modelType;
-  j["audio_file"] = results.audioFile;
-  j["sample_rate"] = results.sampleRate;
-  j["fps"] = results.fps;
-  j["duration_seconds"] = results.duration;
-  j["total_frames"] = results.frames.size();
-  
-  j["metadata"] = {
-    {"skin_geometry_size", results.frames.empty() ? 0 : results.frames[0].skinGeometry.size()},
-    {"tongue_geometry_size", results.frames.empty() ? 0 : results.frames[0].tongueGeometry.size()},
-    {"jaw_transform_size", results.frames.empty() ? 0 : results.frames[0].jawTransform.size()},
-    {"eyes_rotation_size", results.frames.empty() ? 0 : results.frames[0].eyesRotation.size()}
-  };
-  
-  j["frames"] = json::array();
-  for (const auto& frame : results.frames) {
-    json frameJson;
-    frameJson["frame_index"] = frame.frameIndex;
-    frameJson["timestamp"] = frame.timestamp;
-    
-    if (!frame.skinGeometry.empty()) {
-      frameJson["skin_geometry"] = frame.skinGeometry;
-    }
-    if (!frame.tongueGeometry.empty()) {
-      frameJson["tongue_geometry"] = frame.tongueGeometry;
-    }
-    if (!frame.jawTransform.empty()) {
-      frameJson["jaw_transform"] = frame.jawTransform;
-    }
-    if (!frame.eyesRotation.empty()) {
-      frameJson["eyes_rotation"] = frame.eyesRotation;
-    }
-    
-    j["frames"].push_back(frameJson);
-  }
+  j["exportFps"] = static_cast<double>(results.fps);
+  j["trackPath"] = results.audioFile;
+  j["numPoses"] = results.facsNames.size();
+  j["numFrames"] = results.weightMat.size();
+  j["facsNames"] = results.facsNames;
+  j["weightMat"] = results.weightMat;
+  j["joints"] = results.joints;
+  j["rotations"] = results.rotations;
+  j["translations"] = results.translations;
   
   return j;
 }
@@ -536,12 +507,11 @@ int main(int argc, char* argv[]) {
     auto results = RunOfflineInference(modelId, modelConfig, audioPath, fps);
     
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-    std::cerr << "Inference completed in " << duration.count() << " ms" << std::endl;
+    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    std::cerr << "Inference completed in " << durationMs.count() << " ms" << std::endl;
     
     // Convert to JSON
     json outputJson = ResultsToJson(results);
-    outputJson["inference_time_ms"] = duration.count();
     
     // Output JSON
     if (outputPath == "-") {

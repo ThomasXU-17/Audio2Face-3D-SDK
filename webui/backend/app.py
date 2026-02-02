@@ -306,7 +306,8 @@ def run_inference_task(job_id: str, model_id: str, audio_path: Path, result_path
         try:
             with open(result_path, "r") as f:
                 result_data = json.load(f)
-            frames_processed = result_data.get("total_frames", 0)
+            # Support both new format (numFrames) and legacy format (total_frames)
+            frames_processed = result_data.get("numFrames", result_data.get("total_frames", 0))
         except Exception as e:
             frames_processed = 0
             print(f"Error reading result file: {e}")
@@ -339,36 +340,42 @@ def run_mock_inference(job_id: str, model_id: str, audio_path: Path, result_path
             duration = frames / float(rate)
             num_frames = int(duration * 60)  # 60 FPS
         
-        # Generate mock result
+        # 52 FACS names matching Apple ARKit format
+        facs_names = [
+            "eyeBlinkLeft", "eyeLookDownLeft", "eyeLookInLeft", "eyeLookOutLeft", "eyeLookUpLeft",
+            "eyeSquintLeft", "eyeWideLeft", "eyeBlinkRight", "eyeLookDownRight", "eyeLookInRight",
+            "eyeLookOutRight", "eyeLookUpRight", "eyeSquintRight", "eyeWideRight",
+            "jawForward", "jawLeft", "jawRight", "jawOpen",
+            "mouthClose", "mouthFunnel", "mouthPucker", "mouthLeft", "mouthRight",
+            "mouthSmileLeft", "mouthSmileRight", "mouthFrownLeft", "mouthFrownRight",
+            "mouthDimpleLeft", "mouthDimpleRight", "mouthStretchLeft", "mouthStretchRight",
+            "mouthRollLower", "mouthRollUpper", "mouthShrugLower", "mouthShrugUpper",
+            "mouthPressLeft", "mouthPressRight", "mouthLowerDownLeft", "mouthLowerDownRight",
+            "mouthUpperUpLeft", "mouthUpperUpRight",
+            "browDownLeft", "browDownRight", "browInnerUp", "browOuterUpLeft", "browOuterUpRight",
+            "cheekPuff", "cheekSquintLeft", "cheekSquintRight",
+            "noseSneerLeft", "noseSneerRight", "tongueOut"
+        ]
+        
+        # Generate mock result in a2f_export format
         result = {
-            "model_id": model_id,
-            "model_type": model_type,
-            "audio_file": str(audio_path),
-            "total_frames": num_frames,
-            "duration_seconds": duration,
-            "fps": 60,
-            "sample_rate": rate,
-            "metadata": {
-                "skin_geometry_size": 0,
-                "tongue_geometry_size": 0,
-                "jaw_transform_size": 0,
-                "eyes_rotation_size": 0,
-                "note": "This is mock data. Build a2f-web-inference for real results."
-            },
-            "frames": []
+            "exportFps": 60.0,
+            "trackPath": str(audio_path),
+            "numPoses": len(facs_names),
+            "numFrames": num_frames,
+            "facsNames": facs_names,
+            "weightMat": [],
+            "joints": ["jaw", "eye_L", "eye_R"],
+            "rotations": [],
+            "translations": []
         }
         
-        # Generate mock frame data
+        # Generate mock frame data (blendshape weights)
         np.random.seed(42)
         for i in range(num_frames):
-            frame_data = {
-                "frame_index": i,
-                "timestamp": i / 60.0,
-                "skin_geometry": [float(np.random.random() * 0.1) for _ in range(10)],
-                "jaw_transform": [float(np.random.random() * 0.5)],
-                "eyes_rotation": [float(np.random.random() * 0.1) for _ in range(4)]
-            }
-            result["frames"].append(frame_data)
+            # Generate random blendshape weights (mostly zeros with some small values)
+            weights = [max(0.0, float(np.random.random() * 0.3 - 0.1)) for _ in range(len(facs_names))]
+            result["weightMat"].append(weights)
         
         with open(result_path, "w") as f:
             json.dump(result, f, indent=2)
