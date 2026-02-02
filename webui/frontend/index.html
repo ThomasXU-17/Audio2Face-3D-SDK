@@ -243,6 +243,53 @@
             color: white;
         }
 
+        /* Dimension Selection */
+        .dimension-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .dimension-option {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dimension-option:hover {
+            border-color: var(--primary-color);
+        }
+
+        .dimension-option.selected {
+            border-color: var(--primary-color);
+            background: rgba(118, 185, 0, 0.1);
+        }
+
+        .dimension-option input {
+            display: none;
+        }
+
+        .dimension-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .dimension-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+        }
+
+        .dimension-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
         /* Submit Button */
         .submit-btn {
             width: 100%;
@@ -510,10 +557,34 @@
             </div>
         </div>
 
-        <!-- Step 3: Run Inference -->
-        <div class="card" id="inference-card">
+        <!-- Step 3: Output Dimension -->
+        <div class="card" id="dimension-card">
             <h2 class="card-title">
                 <span class="step">3</span>
+                输出维度
+            </h2>
+            <div class="dimension-options">
+                <label class="dimension-option selected" id="dim-52-option">
+                    <input type="radio" name="dimension" value="52" checked>
+                    <div class="dimension-info">
+                        <span class="dimension-value">52 维度</span>
+                        <span class="dimension-desc">仅皮肤混合形状 (兼容 Apple ARKit)</span>
+                    </div>
+                </label>
+                <label class="dimension-option" id="dim-68-option">
+                    <input type="radio" name="dimension" value="68">
+                    <div class="dimension-info">
+                        <span class="dimension-value">68 维度</span>
+                        <span class="dimension-desc">皮肤 + 舌头混合形状 (完整输出)</span>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Step 4: Run Inference -->
+        <div class="card" id="inference-card">
+            <h2 class="card-title">
+                <span class="step">4</span>
                 开始推理
             </h2>
             <button class="submit-btn" id="submit-btn" disabled>
@@ -574,6 +645,7 @@
         // State
         let uploadedFileId = null;
         let selectedModel = null;
+        let selectedDimension = 52;  // Default to 52 (ARKit compatible)
         let currentJobId = null;
 
         // DOM Elements
@@ -730,6 +802,18 @@
         // Submit inference
         submitBtn.addEventListener('click', startInference);
 
+        // Dimension selection handlers
+        document.querySelectorAll('.dimension-option').forEach(option => {
+            option.addEventListener('click', () => {
+                document.querySelectorAll('.dimension-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+                option.classList.add('selected');
+                option.querySelector('input').checked = true;
+                selectedDimension = parseInt(option.querySelector('input').value);
+            });
+        });
+
         async function startInference() {
             if (!uploadedFileId || !selectedModel) return;
             
@@ -741,6 +825,7 @@
             const formData = new FormData();
             formData.append('model_id', selectedModel);
             formData.append('audio_file_id', uploadedFileId);
+            formData.append('poses', selectedDimension.toString());
             
             try {
                 const response = await fetch(`${API_BASE}/api/inference`, {

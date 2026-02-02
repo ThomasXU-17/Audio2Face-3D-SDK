@@ -224,7 +224,7 @@ async def upload_audio(file: UploadFile = File(...)):
     }
 
 
-def run_inference_task(job_id: str, model_id: str, audio_path: Path, result_path: Path):
+def run_inference_task(job_id: str, model_id: str, audio_path: Path, result_path: Path, poses: int = 52):
     """Background task to run inference using the C++ executable."""
     try:
         jobs[job_id]["status"] = "processing"
@@ -234,7 +234,7 @@ def run_inference_task(job_id: str, model_id: str, audio_path: Path, result_path
         if not WEB_INFERENCE_EXECUTABLE.exists():
             # Fall back to mock inference if executable not found
             jobs[job_id]["message"] = "C++ executable not found, using mock inference..."
-            run_mock_inference(job_id, model_id, audio_path, result_path)
+            run_mock_inference(job_id, model_id, audio_path, result_path, poses)
             return
         
         jobs[job_id]["message"] = "Running Audio2Face inference..."
@@ -246,7 +246,8 @@ def run_inference_task(job_id: str, model_id: str, audio_path: Path, result_path
             "--audio", str(audio_path),
             "--output", str(result_path),
             "--data-dir", str(DATA_DIR),
-            "--fps", "60"
+            "--fps", "60",
+            "--poses", str(poses)
         ]
         
         # Set up environment with library paths
@@ -325,7 +326,7 @@ def run_inference_task(job_id: str, model_id: str, audio_path: Path, result_path
         jobs[job_id]["message"] = f"Error: {str(e)}"
 
 
-def run_mock_inference(job_id: str, model_id: str, audio_path: Path, result_path: Path):
+def run_mock_inference(job_id: str, model_id: str, audio_path: Path, result_path: Path, poses: int = 52):
     """Fallback mock inference when C++ executable is not available."""
     import wave
     
@@ -340,8 +341,8 @@ def run_mock_inference(job_id: str, model_id: str, audio_path: Path, result_path
             duration = frames / float(rate)
             num_frames = int(duration * 60)  # 60 FPS
         
-        # 52 FACS names matching Apple ARKit format
-        facs_names = [
+        # 52 FACS skin blendshape names matching Apple ARKit format
+        facs_names_skin = [
             "eyeBlinkLeft", "eyeLookDownLeft", "eyeLookInLeft", "eyeLookOutLeft", "eyeLookUpLeft",
             "eyeSquintLeft", "eyeWideLeft", "eyeBlinkRight", "eyeLookDownRight", "eyeLookInRight",
             "eyeLookOutRight", "eyeLookUpRight", "eyeSquintRight", "eyeWideRight",
@@ -356,6 +357,22 @@ def run_mock_inference(job_id: str, model_id: str, audio_path: Path, result_path
             "cheekPuff", "cheekSquintLeft", "cheekSquintRight",
             "noseSneerLeft", "noseSneerRight", "tongueOut"
         ]
+        
+        # 16 tongue blendshape names
+        facs_names_tongue = [
+            "tongue_TongueBack", "tongue_TongueCurlUp", "tongue_TongueDown",
+            "tongue_TongueLeft", "tongue_TongueLong", "tongue_TongueNarrow",
+            "tongue_TongueRight", "tongue_TongueRollDown", "tongue_TongueRollLeft",
+            "tongue_TongueRollRight", "tongue_TongueRollUp", "tongue_TongueSquish",
+            "tongue_TongueUp", "tongue_TongueWide", "tongue_TongueToTeeth",
+            "tongue_TonguePull"
+        ]
+        
+        # Select blendshape names based on poses parameter
+        if poses == 52:
+            facs_names = facs_names_skin
+        else:
+            facs_names = facs_names_skin + facs_names_tongue
         
         # Generate mock result in a2f_export format
         result = {
@@ -395,7 +412,8 @@ def run_mock_inference(job_id: str, model_id: str, audio_path: Path, result_path
 async def start_inference(
     background_tasks: BackgroundTasks,
     model_id: str = Form(...),
-    audio_file_id: str = Form(...)
+    audio_file_id: str = Form(...),
+    poses: int = Form(52)  # Default to 52 for ARKit compatibility
 ):
     """Start inference on an uploaded audio file."""
     # Validate model
@@ -413,6 +431,10 @@ async def start_inference(
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
     
+    # Validate poses parameter
+    if poses not in [0, 52, 68]:
+        poses = 52  # Default to 52 if invalid value
+    
     # Create job
     job_id = str(uuid.uuid4())
     result_path = RESULTS_DIR / f"{job_id}_result.json"
@@ -423,6 +445,7 @@ async def start_inference(
         "message": "Job queued for processing",
         "model_id": model_id,
         "audio_file_id": audio_file_id,
+        "poses": poses,
         "created_at": datetime.now().isoformat(),
         "result_file": None,
         "frames_processed": None
@@ -434,7 +457,8 @@ async def start_inference(
         job_id, 
         model_id, 
         audio_path, 
-        result_path
+        result_path,
+        poses
     )
     
     return InferenceResult(

@@ -250,6 +250,7 @@ struct InferenceResults {
   std::string audioFile;
   int fps;
   double duration;
+  int numPosesLimit;  // 52 or 68 (0 = no limit)
   std::vector<std::string> facsNames;
   std::vector<std::vector<float>> weightMat;  // [numFrames][numPoses]
   std::vector<std::string> joints;
@@ -266,11 +267,13 @@ InferenceResults RunOfflineInference(
   const std::string& modelId,
   const ModelConfig& config,
   const std::string& audioPath,
-  int fps = 60
+  int fps = 60,
+  int numPosesLimit = 0  // 0 = no limit, 52 = skin only, 68 = skin + tongue
 ) {
   InferenceResults results;
   results.audioFile = audioPath;
   results.fps = fps;
+  results.numPosesLimit = numPosesLimit;
 
   // Load audio
   int sampleRate;
@@ -310,8 +313,8 @@ InferenceResults RunOfflineInference(
     }
   }
   
-  // Add tongue pose if available
-  if (blendshapeData.tongueSolver) {
+  // Add tongue pose if available (only if numPosesLimit != 52)
+  if (blendshapeData.tongueSolver && numPosesLimit != 52) {
     const int numTonguePoses = blendshapeData.tongueSolver->NumBlendshapePoses();
     std::cerr << "Tongue blendshapes: " << numTonguePoses << std::endl;
     for (int i = 0; i < numTonguePoses; ++i) {
@@ -320,6 +323,8 @@ InferenceResults RunOfflineInference(
         results.facsNames.push_back(poseName);
       }
     }
+  } else if (numPosesLimit == 52) {
+    std::cerr << "Tongue blendshapes: skipped (52-pose mode)" << std::endl;
   }
 
   // Set up default joints
@@ -345,9 +350,14 @@ InferenceResults RunOfflineInference(
     
     auto& data = *static_cast<CallbackData*>(userdata);
     
-    // Copy weights to result
-    std::vector<float> frameWeights(res.weights.Size());
-    for (std::size_t i = 0; i < res.weights.Size(); ++i) {
+    // Copy weights to result (optionally truncate to numPosesLimit)
+    std::size_t numPoses = res.weights.Size();
+    if (data.results->numPosesLimit > 0 && static_cast<std::size_t>(data.results->numPosesLimit) < numPoses) {
+      numPoses = static_cast<std::size_t>(data.results->numPosesLimit);
+    }
+    
+    std::vector<float> frameWeights(numPoses);
+    for (std::size_t i = 0; i < numPoses; ++i) {
       frameWeights[i] = res.weights.Data()[i];
     }
     
@@ -433,6 +443,7 @@ int main(int argc, char* argv[]) {
     ("o,output", "Output JSON file path", cxxopts::value<std::string>()->default_value("-"))
     ("d,data-dir", "Data directory path", cxxopts::value<std::string>()->default_value(defaultDataDir))
     ("f,fps", "Output frame rate", cxxopts::value<int>()->default_value("60"))
+    ("p,poses", "Number of output poses (52=skin only, 68=skin+tongue, 0=auto)", cxxopts::value<int>()->default_value("0"))
     ("i,identity", "Identity index for diffusion models", cxxopts::value<int>()->default_value("0"))
     ("l,list", "List available models")
     ("h,help", "Print usage");
@@ -469,6 +480,13 @@ int main(int argc, char* argv[]) {
     std::string audioPath = result["audio"].as<std::string>();
     std::string outputPath = result["output"].as<std::string>();
     int fps = result["fps"].as<int>();
+    int numPoses = result["poses"].as<int>();
+    
+    // Validate poses parameter
+    if (numPoses != 0 && numPoses != 52 && numPoses != 68) {
+      std::cerr << "Warning: Invalid poses value " << numPoses << ". Using 0 (auto)." << std::endl;
+      numPoses = 0;
+    }
     
     // Check if model exists
     if (modelConfigs.find(modelId) == modelConfigs.end()) {
@@ -504,7 +522,7 @@ int main(int argc, char* argv[]) {
     std::cerr << "Starting inference with model: " << modelConfig.name << std::endl;
     auto startTime = std::chrono::high_resolution_clock::now();
     
-    auto results = RunOfflineInference(modelId, modelConfig, audioPath, fps);
+    auto results = RunOfflineInference(modelId, modelConfig, audioPath, fps, numPoses);
     
     auto endTime = std::chrono::high_resolution_clock::now();
     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
