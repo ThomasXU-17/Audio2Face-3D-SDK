@@ -1,0 +1,7 @@
+# Web UI dependencies
+# Add these to your virtual environment for the Audio2Face Web UI
+
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6
+pydub>=0.25.1

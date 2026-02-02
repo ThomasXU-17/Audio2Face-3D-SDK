@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio2Face Web Interface</title>
+    <style>
+        :root {
+            --primary-color: #76b900;
+            --primary-dark: #5a8f00;
+            --bg-dark: #1a1a1a;
+            --bg-card: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --border-color: #404040;
+            --success-color: #4caf50;
+            --error-color: #f44336;
+            --warning-color: #ff9800;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .logo svg {
+            width: 48px;
+            height: 48px;
+            fill: var(--primary-color);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            background: linear-gradient(90deg, var(--primary-color), #a8e063);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-top: 8px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-title .step {
+            background: var(--primary-color);
+            color: #000;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        /* File Upload */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(118, 185, 0, 0.05);
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary-color);
+            background: rgba(118, 185, 0, 0.1);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--primary-color);
+            background: rgba(118, 185, 0, 0.15);
+        }
+
+        .upload-area svg {
+            width: 48px;
+            height: 48px;
+            fill: var(--text-secondary);
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(118, 185, 0, 0.1);
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .file-info svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--primary-color);
+        }
+
+        .file-name {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .file-remove {
+            background: none;
+            border: none;
+            color: var(--error-color);
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        /* Model Selection */
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .model-option {
+            position: relative;
+            padding: 20px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .model-option:hover {
+            border-color: var(--primary-color);
+        }
+
+        .model-option.selected {
+            border-color: var(--primary-color);
+            background: rgba(118, 185, 0, 0.1);
+        }
+
+        .model-option.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .model-option input {
+            display: none;
+        }
+
+        .model-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .model-type {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .model-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-regression {
+            background: #2196f3;
+            color: white;
+        }
+
+        .badge-diffusion {
+            background: #9c27b0;
+            color: white;
+        }
+
+        .badge-unavailable {
+            background: var(--error-color);
+            color: white;
+        }
+
+        /* Submit Button */
+        .submit-btn {
+            width: 100%;
+            padding: 18px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .submit-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(118, 185, 0, 0.4);
+        }
+
+        .submit-btn:disabled {
+            background: var(--border-color);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        .submit-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        /* Progress Section */
+        .progress-section {
+            display: none;
+        }
+
+        .progress-section.active {
+            display: block;
+        }
+
+        .progress-bar-container {
+            background: var(--border-color);
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), #a8e063);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+
+        .progress-bar.indeterminate {
+            width: 100%;
+            animation: indeterminate 1.5s infinite linear;
+            background: linear-gradient(90deg, 
+                var(--primary-color) 0%, 
+                #a8e063 50%, 
+                var(--primary-color) 100%
+            );
+            background-size: 200% 100%;
+        }
+
+        @keyframes indeterminate {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .status-text {
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        /* Results Section */
+        .results-section {
+            display: none;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        .result-success {
+            text-align: center;
+            padding: 30px;
+        }
+
+        .result-success svg {
+            width: 64px;
+            height: 64px;
+            fill: var(--success-color);
+            margin-bottom: 20px;
+        }
+
+        .result-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-item {
+            background: rgba(118, 185, 0, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .download-btn {
+            padding: 15px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            background: var(--primary-color);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .download-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .download-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .new-inference-btn {
+            background: transparent;
+            border: 2px solid var(--border-color);
+            color: var(--text-primary);
+            margin-left: 10px;
+        }
+
+        .new-inference-btn:hover {
+            border-color: var(--primary-color);
+            background: rgba(118, 185, 0, 0.1);
+        }
+
+        /* Error Message */
+        .error-message {
+            display: none;
+            padding: 15px;
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid var(--error-color);
+            border-radius: 8px;
+            color: var(--error-color);
+            margin-bottom: 20px;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px 15px;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .model-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                <h1>Audio2Face</h1>
+            </div>
+            <p class="subtitle">将音频转换为面部动画 - NVIDIA Audio2Face SDK</p>
+        </header>
+
+        <div class="error-message" id="error-message"></div>
+
+        <!-- Step 1: Upload Audio -->
+        <div class="card" id="upload-card">
+            <h2 class="card-title">
+                <span class="step">1</span>
+                上传音频文件
+            </h2>
+            <div class="upload-area" id="upload-area">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+                </svg>
+                <p class="upload-text">点击或拖拽文件到此处上传</p>
+                <p class="upload-hint">支持 WAV, MP3, OGG, FLAC, M4A 格式 (将自动转换为 16kHz)</p>
+            </div>
+            <input type="file" id="file-input" accept=".wav,.mp3,.ogg,.flac,.m4a,audio/*">
+            <div class="file-info" id="file-info" style="display: none;">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                </svg>
+                <span class="file-name" id="file-name"></span>
+                <button class="file-remove" id="file-remove" title="移除文件">✕</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Select Model -->
+        <div class="card" id="model-card">
+            <h2 class="card-title">
+                <span class="step">2</span>
+                选择推理模型
+            </h2>
+            <div class="model-grid" id="model-grid">
+                <!-- Models will be loaded dynamically -->
+                <div class="model-option" style="opacity: 0.5;">
+                    <p>正在加载模型列表...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Run Inference -->
+        <div class="card" id="inference-card">
+            <h2 class="card-title">
+                <span class="step">3</span>
+                开始推理
+            </h2>
+            <button class="submit-btn" id="submit-btn" disabled>
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                开始生成面部动画
+            </button>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="card progress-section" id="progress-section">
+            <h2 class="card-title">处理中</h2>
+            <div class="progress-bar-container">
+                <div class="progress-bar indeterminate" id="progress-bar"></div>
+            </div>
+            <p class="status-text" id="status-text">正在处理音频...</p>
+        </div>
+
+        <!-- Results Section -->
+        <div class="card results-section" id="results-section">
+            <div class="result-success">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <h3>推理完成！</h3>
+                <div class="result-stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="frames-count">0</div>
+                        <div class="stat-label">总帧数</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="model-used">-</div>
+                        <div class="stat-label">使用模型</div>
+                    </div>
+                </div>
+                <button class="download-btn" id="download-btn">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                    </svg>
+                    下载结果 (JSON)
+                </button>
+                <button class="download-btn new-inference-btn" id="new-inference-btn">
+                    重新开始
+                </button>
+            </div>
+        </div>
+
+        <footer>
+            <p>Powered by <a href="https://developer.nvidia.com/audio2face" target="_blank">NVIDIA Audio2Face SDK</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:8000';
+
+        // State
+        let uploadedFileId = null;
+        let selectedModel = null;
+        let currentJobId = null;
+
+        // DOM Elements
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const fileInfo = document.getElementById('file-info');
+        const fileName = document.getElementById('file-name');
+        const fileRemove = document.getElementById('file-remove');
+        const modelGrid = document.getElementById('model-grid');
+        const submitBtn = document.getElementById('submit-btn');
+        const progressSection = document.getElementById('progress-section');
+        const progressBar = document.getElementById('progress-bar');
+        const statusText = document.getElementById('status-text');
+        const resultsSection = document.getElementById('results-section');
+        const framesCount = document.getElementById('frames-count');
+        const modelUsed = document.getElementById('model-used');
+        const downloadBtn = document.getElementById('download-btn');
+        const newInferenceBtn = document.getElementById('new-inference-btn');
+        const errorMessage = document.getElementById('error-message');
+
+        // Load available models
+        async function loadModels() {
+            try {
+                const response = await fetch(`${API_BASE}/api/models`);
+                const models = await response.json();
+                renderModels(models);
+            } catch (error) {
+                showError('无法连接到服务器。请确保后端服务正在运行。');
+                modelGrid.innerHTML = '<p style="color: var(--error-color);">加载模型失败</p>';
+            }
+        }
+
+        function renderModels(models) {
+            modelGrid.innerHTML = '';
+            models.forEach(model => {
+                const div = document.createElement('div');
+                div.className = `model-option ${model.available ? '' : 'disabled'}`;
+                div.dataset.modelId = model.id;
+                div.innerHTML = `
+                    <input type="radio" name="model" value="${model.id}" ${model.available ? '' : 'disabled'}>
+                    <div class="model-name">${model.name}</div>
+                    <div class="model-type">${model.description}</div>
+                    <span class="model-badge badge-${model.type}">${model.type}</span>
+                    ${!model.available ? '<span class="model-badge badge-unavailable">不可用</span>' : ''}
+                `;
+                
+                if (model.available) {
+                    div.addEventListener('click', () => selectModel(model.id, div));
+                }
+                
+                modelGrid.appendChild(div);
+            });
+        }
+
+        function selectModel(modelId, element) {
+            // Remove selection from all
+            document.querySelectorAll('.model-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            
+            // Select this one
+            element.classList.add('selected');
+            element.querySelector('input').checked = true;
+            selectedModel = modelId;
+            
+            updateSubmitButton();
+        }
+
+        // File upload handlers
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+        
+        fileRemove.addEventListener('click', () => {
+            uploadedFileId = null;
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+            uploadArea.style.display = 'block';
+            updateSubmitButton();
+        });
+
+        async function handleFileSelect(file) {
+            // Validate file type
+            const validTypes = ['.wav', '.mp3', '.ogg', '.flac', '.m4a'];
+            const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+            if (!validTypes.includes(ext) && !file.type.startsWith('audio/')) {
+                showError('不支持的文件格式。请上传音频文件。');
+                return;
+            }
+
+            hideError();
+            fileName.textContent = file.name;
+            fileInfo.style.display = 'flex';
+            uploadArea.style.display = 'none';
+            
+            // Upload file
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                statusText.textContent = '正在上传文件...';
+                progressSection.classList.add('active');
+                
+                const response = await fetch(`${API_BASE}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || '上传失败');
+                }
+                
+                const result = await response.json();
+                uploadedFileId = result.file_id;
+                
+                progressSection.classList.remove('active');
+                updateSubmitButton();
+                
+            } catch (error) {
+                showError(`上传失败: ${error.message}`);
+                fileInfo.style.display = 'none';
+                uploadArea.style.display = 'block';
+                progressSection.classList.remove('active');
+            }
+        }
+
+        function updateSubmitButton() {
+            submitBtn.disabled = !(uploadedFileId && selectedModel);
+        }
+
+        // Submit inference
+        submitBtn.addEventListener('click', startInference);
+
+        async function startInference() {
+            if (!uploadedFileId || !selectedModel) return;
+            
+            hideError();
+            submitBtn.disabled = true;
+            progressSection.classList.add('active');
+            statusText.textContent = '正在启动推理...';
+            
+            const formData = new FormData();
+            formData.append('model_id', selectedModel);
+            formData.append('audio_file_id', uploadedFileId);
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/inference`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || '推理启动失败');
+                }
+                
+                const result = await response.json();
+                currentJobId = result.job_id;
+                
+                // Poll for results
+                pollResults();
+                
+            } catch (error) {
+                showError(`推理失败: ${error.message}`);
+                progressSection.classList.remove('active');
+                submitBtn.disabled = false;
+            }
+        }
+
+        async function pollResults() {
+            if (!currentJobId) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/results/${currentJobId}`);
+                const result = await response.json();
+                
+                statusText.textContent = result.message;
+                
+                if (result.status === 'completed') {
+                    progressSection.classList.remove('active');
+                    showResults(result);
+                } else if (result.status === 'failed') {
+                    progressSection.classList.remove('active');
+                    showError(`推理失败: ${result.message}`);
+                    submitBtn.disabled = false;
+                } else {
+                    // Continue polling
+                    setTimeout(pollResults, 1000);
+                }
+                
+            } catch (error) {
+                showError(`获取结果失败: ${error.message}`);
+                progressSection.classList.remove('active');
+                submitBtn.disabled = false;
+            }
+        }
+
+        function showResults(result) {
+            resultsSection.classList.add('active');
+            framesCount.textContent = result.frames_processed || '-';
+            modelUsed.textContent = selectedModel;
+        }
+
+        // Download result
+        downloadBtn.addEventListener('click', async () => {
+            if (!currentJobId) return;
+            
+            try {
+                window.location.href = `${API_BASE}/api/download/${currentJobId}`;
+            } catch (error) {
+                showError(`下载失败: ${error.message}`);
+            }
+        });
+
+        // New inference
+        newInferenceBtn.addEventListener('click', () => {
+            // Reset state
+            uploadedFileId = null;
+            selectedModel = null;
+            currentJobId = null;
+            
+            // Reset UI
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+            uploadArea.style.display = 'block';
+            document.querySelectorAll('.model-option').forEach(opt => {
+                opt.classList.remove('selected');
+                opt.querySelector('input').checked = false;
+            });
+            resultsSection.classList.remove('active');
+            progressSection.classList.remove('active');
+            submitBtn.disabled = true;
+            hideError();
+        });
+
+        // Error handling
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('active');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModels();
+        });
+    </script>
+</body>
+</html>
