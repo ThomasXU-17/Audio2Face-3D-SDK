@@ -30,7 +30,14 @@ if(DEFINED ENV{GTEST_ROOT})
     list(APPEND _gtest_search_paths $ENV{GTEST_ROOT})
 endif()
 
-# Priority 3: Standard system locations
+# Priority 3: Project's bundled gtest (higher priority than system)
+# This ensures we use the project's gtest instead of older system versions
+list(APPEND _gtest_search_paths
+    ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/release
+    ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/debug
+)
+
+# Priority 4: Standard system locations (fallback only)
 list(APPEND _gtest_search_paths
     /usr/local
     /usr
@@ -45,36 +52,41 @@ set(_found_release FALSE)
 # Find debug version
 find_path(GTEST_INCLUDE_DIR_DEBUG
     NAMES gtest/gtest.h
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/debug
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES include
+    NO_DEFAULT_PATH
     DOC "GTest debug include directory"
 )
 
 find_library(GTEST_LIBRARY_DEBUG
     NAMES gtest
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/debug
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GTest debug library"
 )
 
 find_library(GTEST_MAIN_LIBRARY_DEBUG
     NAMES gtest_main
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/debug
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GTest debug main library"
 )
 
 find_library(GMOCK_LIBRARY_DEBUG
     NAMES gmock
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/debug
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GMock debug library"
 )
 
 find_library(GMOCK_MAIN_LIBRARY_DEBUG
     NAMES gmock_main
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/debug
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GMock debug main library"
 )
 
@@ -85,36 +97,41 @@ endif()
 # Find release version
 find_path(GTEST_INCLUDE_DIR_RELEASE
     NAMES gtest/gtest.h
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/release
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES include
+    NO_DEFAULT_PATH
     DOC "GTest release include directory"
 )
 
 find_library(GTEST_LIBRARY_RELEASE
     NAMES gtest
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/release
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GTest release library"
 )
 
 find_library(GTEST_MAIN_LIBRARY_RELEASE
     NAMES gtest_main
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/release
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GTest release main library"
 )
 
 find_library(GMOCK_LIBRARY_RELEASE
     NAMES gmock
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/release
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GMock release library"
 )
 
 find_library(GMOCK_MAIN_LIBRARY_RELEASE
     NAMES gmock_main
-    PATHS ${_gtest_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/gtest/release
+    PATHS ${_gtest_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "GMock release main library"
 )
 

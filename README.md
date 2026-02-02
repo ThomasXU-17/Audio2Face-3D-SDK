@@ -1,3 +1,44 @@
+# 🔥 Notice: This is a fork of Audio2Face-3D-SDK
+
+```bash
+git clone git@github.com:ThomasXU-17/Audio2Face-3D-SDK.git
+
+cd Audio2Face-3D-SDK
+git lfs pull # Pull large files in sample-data
+./fetch_deps.sh release
+
+export TENSORRT_ROOT_DIR="path/to/tensorrt"
+
+./build.sh clean release # Optional: Remove previous build
+./build.sh all release # Uses CMake and Ninja from `_deps\build-deps` and builds to `_build` by default.
+```
+
+```bash
+# Create venv
+python -m venv venv # Requires python >= v3.8, <= v3.10.x
+source ./venv/bin/activate
+pip install -r deps/requirements.txt # If this step fails, please verify your Python version (python --version).
+
+# Run these scripts in venv
+hf auth login         # One-time setup: when prompted, paste the user access token you generated on Hugging Face
+./download_models.sh  # Download all the Audio2Face & Audio2Emotion models
+
+# Generate unit test data
+# Convert downloaded models to TensorRT format
+./gen_testdata.sh
+```
+
+```bash
+./run_sample.sh ./_build/release/audio2face-sdk/bin/sample-a2f-executor
+```
+---
+
+---
+
+---
+# Original README goes below :
+---
+
 # Audio2X SDK
 
 The Audio2X SDK is a comprehensive toolkit for fast audio-driven animation and emotion detection. It consists of two main components:

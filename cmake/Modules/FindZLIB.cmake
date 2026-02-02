@@ -27,7 +27,14 @@ if(DEFINED ENV{ZLIB_ROOT})
     list(APPEND _zlib_search_paths $ENV{ZLIB_ROOT})
 endif()
 
-# Priority 3: Standard system locations
+# Priority 3: Project's bundled zlib (higher priority than system)
+# This ensures we use the project's zlib 1.3.1+ instead of older system versions
+list(APPEND _zlib_search_paths
+    ${PROJECT_SOURCE_DIR}/_deps/target-deps/zlib/release
+    ${PROJECT_SOURCE_DIR}/_deps/target-deps/zlib/debug
+)
+
+# Priority 4: Standard system locations (fallback only)
 list(APPEND _zlib_search_paths
     /usr/local
     /usr
@@ -42,15 +49,17 @@ set(_found_release FALSE)
 # Find debug version
 find_path(ZLIB_INCLUDE_DIR_DEBUG
     NAMES zlib.h
-    PATHS ${_zlib_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/zlib/debug
+    PATHS ${_zlib_search_paths}
     PATH_SUFFIXES include
+    NO_DEFAULT_PATH
     DOC "ZLIB debug include directory"
 )
 
 find_library(ZLIB_LIBRARY_DEBUG
     NAMES z zlib zlibd
-    PATHS ${_zlib_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/zlib/debug
+    PATHS ${_zlib_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "ZLIB debug library"
 )
 
@@ -61,15 +70,17 @@ endif()
 # Find release version
 find_path(ZLIB_INCLUDE_DIR_RELEASE
     NAMES zlib.h
-    PATHS ${_zlib_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/zlib/release
+    PATHS ${_zlib_search_paths}
     PATH_SUFFIXES include
+    NO_DEFAULT_PATH
     DOC "ZLIB release include directory"
 )
 
 find_library(ZLIB_LIBRARY_RELEASE
     NAMES z zlib
-    PATHS ${_zlib_search_paths} ${PROJECT_SOURCE_DIR}/_deps/target-deps/zlib/release
+    PATHS ${_zlib_search_paths}
     PATH_SUFFIXES lib lib64
+    NO_DEFAULT_PATH
     DOC "ZLIB release library"
 )
 

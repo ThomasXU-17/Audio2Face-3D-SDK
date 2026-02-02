@@ -15,6 +15,9 @@ fi
 export PATH="$TENSORRT_ROOT_DIR/bin:$PATH"
 export LD_LIBRARY_PATH="$TENSORRT_ROOT_DIR/lib:$LD_LIBRARY_PATH"
 
+echo "Setting up virtual environment..."
+source ./venv/bin/activate
+
 echo "Generating test data..."
 python "$BASE_DIR/audio2x-common/scripts/gen_test_data.py"
 python "$BASE_DIR/audio2face-sdk/scripts/gen_test_data.py"
