@@ -8,26 +8,37 @@
 - 🤖 **模型选择**：支持 Regression 和 Diffusion 两种模型类型
 - 📊 **实时状态**：显示推理进度和状态
 - 📥 **结果下载**：下载 JSON 格式的面部动画数据
+- 🚀 **真实推理**：使用 C++ 编译的 `a2f-web-inference` 程序进行 GPU 加速推理
 
 ## 系统要求
 
 - Python 3.8 - 3.10
+- NVIDIA GPU 支持 CUDA 12.8+
 - 已完成 Audio2Face SDK 的构建和模型生成
 - ffmpeg（可选，用于音频格式转换）
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 构建 C++ 推理程序
+
+```bash
+# 确保已经构建整个项目
+./build.sh all release
+```
+
+这会编译 `a2f-web-inference` 程序到 `_build/release/audio2face-sdk/bin/` 目录。
+
+### 2. 安装 Python 依赖
 
 ```bash
 # 确保在项目根目录的虚拟环境中
 source venv/bin/activate
 
 # 安装 Web UI 依赖
-pip install fastapi uvicorn python-multipart pydub
+pip install -r webui/requirements.txt
 ```
 
-### 2. 确保模型已生成
+### 3. 确保模型已生成
 
 在运行 Web UI 之前，请确保已经运行过 `gen_testdata.sh` 来生成 TensorRT 模型：
 
@@ -35,7 +46,7 @@ pip install fastapi uvicorn python-multipart pydub
 ./gen_testdata.sh
 ```
 
-### 3. 启动服务
+### 4. 启动服务
 
 ```bash
 # 运行启动脚本
@@ -54,11 +65,42 @@ cd webui/frontend
 python -m http.server 3000
 ```
 
-### 4. 访问界面
+### 5. 访问界面
 
 - **前端界面**：http://localhost:3000 或直接打开 `webui/frontend/index.html`
 - **后端 API**：http://localhost:8000
 - **API 文档**：http://localhost:8000/docs
+
+## C++ 推理程序使用
+
+可以直接使用命令行运行推理：
+
+```bash
+# 查看帮助
+./_build/release/audio2face-sdk/bin/a2f-web-inference --help
+
+# 列出可用模型
+./_build/release/audio2face-sdk/bin/a2f-web-inference --list
+
+# 运行推理
+./_build/release/audio2face-sdk/bin/a2f-web-inference \
+  --model mark \
+  --audio sample-data/audio_4sec_16k_s16le.wav \
+  --output result.json
+```
+
+### 命令行参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-m, --model` | 模型 ID (mark, claire, james, multi-diffusion) | mark |
+| `-a, --audio` | 输入音频文件路径 (推荐 16kHz WAV) | 必需 |
+| `-o, --output` | 输出 JSON 文件路径 (- 表示标准输出) | - |
+| `-d, --data-dir` | 数据目录路径 | _data |
+| `-f, --fps` | 输出帧率 | 60 |
+| `-i, --identity` | 扩散模型的身份索引 | 0 |
+| `-l, --list` | 列出可用模型 | - |
+| `-h, --help` | 显示帮助 | - |
 
 ## 使用流程
 
@@ -100,7 +142,7 @@ GET /api/download/{job_id}
 
 ## 输出格式
 
-推理结果以 JSON 格式返回，包含每一帧的面部动画数据：
+推理结果以 JSON 格式返回，包含每一帧的面部几何数据：
 
 ```json
 {
@@ -109,22 +151,23 @@ GET /api/download/{job_id}
   "audio_file": "/path/to/audio.wav",
   "total_frames": 240,
   "duration_seconds": 4.0,
+  "fps": 60,
+  "sample_rate": 16000,
+  "inference_time_ms": 2938,
   "metadata": {
-    "sample_rate": 16000,
-    "fps": 60
+    "skin_geometry_size": 184560,
+    "tongue_geometry_size": 16806,
+    "jaw_transform_size": 16,
+    "eyes_rotation_size": 6
   },
   "frames": [
     {
       "frame_index": 0,
       "timestamp": 0.0,
-      "blendshapes": {
-        "jawOpen": 0.123,
-        "mouthSmile_L": 0.045,
-        "mouthSmile_R": 0.048,
-        "browInnerUp": 0.012,
-        "eyeWide_L": 0.008,
-        "eyeWide_R": 0.009
-      }
+      "skin_geometry": [/* 184560 个浮点数，表示皮肤网格顶点 */],
+      "tongue_geometry": [/* 16806 个浮点数，表示舌头网格顶点 */],
+      "jaw_transform": [/* 16 个浮点数，表示下巴变换矩阵 (4x4) */],
+      "eyes_rotation": [/* 6 个浮点数，表示眼睛旋转 */]
     }
   ]
 }

@@ -32,6 +32,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "_data"
 BUILD_DIR = PROJECT_ROOT / "_build" / "release"
+WEB_INFERENCE_EXECUTABLE = BUILD_DIR / "audio2face-sdk" / "bin" / "a2f-web-inference"
 SAMPLE_EXECUTABLE = BUILD_DIR / "audio2face-sdk" / "bin" / "sample-a2f-executor"
 UPLOADS_DIR = PROJECT_ROOT / "webui" / "uploads"
 RESULTS_DIR = PROJECT_ROOT / "webui" / "results"
@@ -224,92 +225,91 @@ async def upload_audio(file: UploadFile = File(...)):
 
 
 def run_inference_task(job_id: str, model_id: str, audio_path: Path, result_path: Path):
-    """Background task to run inference."""
+    """Background task to run inference using the C++ executable."""
     try:
         jobs[job_id]["status"] = "processing"
-        jobs[job_id]["message"] = "Running inference..."
+        jobs[job_id]["message"] = "Initializing inference..."
         
-        model_info = AVAILABLE_MODELS[model_id]
-        model_path = model_info["model_path"]
-        model_type = model_info["type"]
-        
-        # Create a custom inference script that outputs to JSON
-        inference_script = f'''
-import sys
-import json
-import numpy as np
-sys.path.insert(0, "{PROJECT_ROOT}")
-
-# For now, we'll create a mock result since the actual SDK requires compiled binaries
-# In production, this would call the actual Audio2Face SDK
-
-result = {{
-    "model_id": "{model_id}",
-    "model_type": "{model_type}",
-    "audio_file": "{audio_path}",
-    "frames": [],
-    "metadata": {{
-        "sample_rate": 16000,
-        "fps": 60
-    }}
-}}
-
-# Calculate approximate number of frames based on audio duration
-import wave
-with wave.open("{audio_path}", "rb") as audio:
-    frames = audio.getnframes()
-    rate = audio.getframerate()
-    duration = frames / float(rate)
-    num_frames = int(duration * 60)  # 60 FPS
-
-# Generate mock blendshape data
-# In production, this would be actual inference results
-np.random.seed(42)
-for i in range(num_frames):
-    frame_data = {{
-        "frame_index": i,
-        "timestamp": i / 60.0,
-        "blendshapes": {{
-            "jawOpen": float(np.random.random() * 0.5),
-            "mouthSmile_L": float(np.random.random() * 0.3),
-            "mouthSmile_R": float(np.random.random() * 0.3),
-            "browInnerUp": float(np.random.random() * 0.2),
-            "eyeWide_L": float(np.random.random() * 0.1),
-            "eyeWide_R": float(np.random.random() * 0.1),
-        }}
-    }}
-    result["frames"].append(frame_data)
-
-result["total_frames"] = num_frames
-result["duration_seconds"] = duration
-
-with open("{result_path}", "w") as f:
-    json.dump(result, f, indent=2)
-
-print(f"Processed {{num_frames}} frames")
-'''
-        
-        # Execute the inference
-        result = subprocess.run(
-            ["python3", "-c", inference_script],
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout
-        )
-        
-        if result.returncode != 0:
-            jobs[job_id]["status"] = "failed"
-            jobs[job_id]["message"] = f"Inference failed: {result.stderr}"
+        # Check if the C++ executable exists
+        if not WEB_INFERENCE_EXECUTABLE.exists():
+            # Fall back to mock inference if executable not found
+            jobs[job_id]["message"] = "C++ executable not found, using mock inference..."
+            run_mock_inference(job_id, model_id, audio_path, result_path)
             return
         
-        # Parse output to get frame count
-        frames_processed = 0
-        for line in result.stdout.split("\n"):
-            if "Processed" in line and "frames" in line:
-                try:
-                    frames_processed = int(line.split()[1])
-                except:
-                    pass
+        jobs[job_id]["message"] = "Running Audio2Face inference..."
+        
+        # Build command to run the C++ inference executable
+        cmd = [
+            str(WEB_INFERENCE_EXECUTABLE),
+            "--model", model_id,
+            "--audio", str(audio_path),
+            "--output", str(result_path),
+            "--data-dir", str(DATA_DIR),
+            "--fps", "60"
+        ]
+        
+        # Set up environment with library paths
+        env = os.environ.copy()
+        
+        # Add library paths for CUDA and TensorRT
+        tensorrt_lib = os.environ.get("TENSORRT_ROOT_DIR", "")
+        if tensorrt_lib:
+            tensorrt_lib = os.path.join(tensorrt_lib, "lib")
+        
+        cuda_lib = os.environ.get("CUDA_PATH", "/usr/local/cuda")
+        if cuda_lib:
+            cuda_lib = os.path.join(cuda_lib, "lib64")
+        
+        # Build library path
+        ld_library_path = env.get("LD_LIBRARY_PATH", "")
+        additional_paths = [
+            str(BUILD_DIR / "audio2x-sdk" / "lib"),
+            str(BUILD_DIR / "audio2face-sdk" / "lib"),
+            str(BUILD_DIR / "audio2emotion-sdk" / "lib"),
+        ]
+        if tensorrt_lib:
+            additional_paths.append(tensorrt_lib)
+        if cuda_lib:
+            additional_paths.append(cuda_lib)
+        
+        env["LD_LIBRARY_PATH"] = ":".join(additional_paths + [ld_library_path])
+        
+        # Execute the C++ inference program
+        print(f"Running inference command: {' '.join(cmd)}")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minute timeout for long audio files
+            env=env,
+            cwd=str(PROJECT_ROOT)
+        )
+        
+        # Log stderr for debugging (C++ program logs to stderr)
+        if result.stderr:
+            print(f"Inference stderr: {result.stderr}")
+        
+        if result.returncode != 0:
+            error_msg = result.stderr or "Unknown error"
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["message"] = f"Inference failed: {error_msg}"
+            return
+        
+        # Check if result file was created
+        if not result_path.exists():
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["message"] = "Inference completed but no result file was created"
+            return
+        
+        # Read result file to get frame count
+        try:
+            with open(result_path, "r") as f:
+                result_data = json.load(f)
+            frames_processed = result_data.get("total_frames", 0)
+        except Exception as e:
+            frames_processed = 0
+            print(f"Error reading result file: {e}")
         
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["message"] = "Inference completed successfully"
@@ -318,10 +318,70 @@ print(f"Processed {{num_frames}} frames")
         
     except subprocess.TimeoutExpired:
         jobs[job_id]["status"] = "failed"
-        jobs[job_id]["message"] = "Inference timed out"
+        jobs[job_id]["message"] = "Inference timed out (exceeded 10 minutes)"
     except Exception as e:
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["message"] = f"Error: {str(e)}"
+
+
+def run_mock_inference(job_id: str, model_id: str, audio_path: Path, result_path: Path):
+    """Fallback mock inference when C++ executable is not available."""
+    import wave
+    
+    try:
+        model_info = AVAILABLE_MODELS[model_id]
+        model_type = model_info["type"]
+        
+        # Calculate approximate number of frames based on audio duration
+        with wave.open(str(audio_path), "rb") as audio:
+            frames = audio.getnframes()
+            rate = audio.getframerate()
+            duration = frames / float(rate)
+            num_frames = int(duration * 60)  # 60 FPS
+        
+        # Generate mock result
+        result = {
+            "model_id": model_id,
+            "model_type": model_type,
+            "audio_file": str(audio_path),
+            "total_frames": num_frames,
+            "duration_seconds": duration,
+            "fps": 60,
+            "sample_rate": rate,
+            "metadata": {
+                "skin_geometry_size": 0,
+                "tongue_geometry_size": 0,
+                "jaw_transform_size": 0,
+                "eyes_rotation_size": 0,
+                "note": "This is mock data. Build a2f-web-inference for real results."
+            },
+            "frames": []
+        }
+        
+        # Generate mock frame data
+        np.random.seed(42)
+        for i in range(num_frames):
+            frame_data = {
+                "frame_index": i,
+                "timestamp": i / 60.0,
+                "skin_geometry": [float(np.random.random() * 0.1) for _ in range(10)],
+                "jaw_transform": [float(np.random.random() * 0.5)],
+                "eyes_rotation": [float(np.random.random() * 0.1) for _ in range(4)]
+            }
+            result["frames"].append(frame_data)
+        
+        with open(result_path, "w") as f:
+            json.dump(result, f, indent=2)
+        
+        jobs[job_id]["status"] = "completed"
+        jobs[job_id]["message"] = "Mock inference completed (C++ executable not available)"
+        jobs[job_id]["result_file"] = str(result_path)
+        jobs[job_id]["frames_processed"] = num_frames
+        
+    except Exception as e:
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["message"] = f"Mock inference error: {str(e)}"
+
 
 
 @app.post("/api/inference", response_model=InferenceResult)
@@ -442,8 +502,10 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "sdk_available": SAMPLE_EXECUTABLE.exists(),
-        "models_available": sum(1 for m in AVAILABLE_MODELS if check_model_availability(m))
+        "web_inference_available": WEB_INFERENCE_EXECUTABLE.exists(),
+        "sample_executable_available": SAMPLE_EXECUTABLE.exists(),
+        "models_available": sum(1 for m in AVAILABLE_MODELS if check_model_availability(m)),
+        "inference_mode": "real" if WEB_INFERENCE_EXECUTABLE.exists() else "mock"
     }
 
 
