@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio2Face REST API - 音频转面部动画</title>
+    <style>
+        :root {
+            --primary-color: #76b900;
+            --primary-dark: #5a8f00;
+            --bg-dark: #1a1a1a;
+            --bg-card: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --border-color: #404040;
+            --success-color: #4caf50;
+            --error-color: #f44336;
+            --warning-color: #ff9800;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .logo svg {
+            width: 48px;
+            height: 48px;
+            fill: var(--primary-color);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            background: linear-gradient(90deg, var(--primary-color), #a8e063);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-badge {
+            background: var(--primary-color);
+            color: #000;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        /* Upload Area */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 50px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(118, 185, 0, 0.05);
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary-color);
+            background: rgba(118, 185, 0, 0.1);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--primary-color);
+            background: rgba(118, 185, 0, 0.15);
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        #audioFile {
+            display: none;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background: rgba(118, 185, 0, 0.1);
+            border-radius: 8px;
+            border: 1px solid var(--primary-color);
+        }
+
+        .file-icon {
+            font-size: 2rem;
+        }
+
+        .file-details {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: #000;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(118, 185, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #505050;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        /* Status */
+        .status-box {
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .status-box.loading {
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid var(--warning-color);
+        }
+
+        .status-box.success {
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid var(--success-color);
+        }
+
+        .status-box.error {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid var(--error-color);
+        }
+
+        .status-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-message {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Progress */
+        .progress-container {
+            margin: 20px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: var(--text-secondary);
+        }
+
+        /* Settings */
+        .settings-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .setting-label {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .setting-description {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            padding: 10px 15px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        /* Results */
+        .result-item {
+            padding: 15px;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .result-info {
+            flex: 1;
+        }
+
+        .result-label {
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .result-value {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-family: monospace;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* API Status */
+        .api-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-dark);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--error-color);
+        }
+
+        .status-dot.connected {
+            background: var(--success-color);
+        }
+
+        .logs {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            color: var(--text-secondary);
+        }
+
+        .log-entry.error {
+            color: var(--error-color);
+        }
+
+        .log-entry.success {
+            color: var(--success-color);
+        }
+
+        .log-entry.info {
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                <h1>Audio2Face RestAPI</h1>
+            </div>
+            <p class="subtitle">上传音频文件,生成面部动画数据</p>
+            <div class="api-status" id="apiStatus">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">检查API连接...</span>
+            </div>
+        </header>
+
+        <!-- Step 1: Upload Audio -->
+        <div class="card">
+            <div class="card-title">
+                <span class="step-badge">1</span>
+                上传音频文件
+            </div>
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">🎵</div>
+                <div class="upload-text">点击或拖拽音频文件到此处</div>
+                <div class="upload-hint">支持 WAV, MP3, OGG, FLAC, M4A 格式</div>
+            </div>
+            <input type="file" id="audioFile" accept=".wav,.mp3,.ogg,.flac,.m4a">
+            <div id="fileInfo" class="hidden"></div>
+        </div>
+
+        <!-- Step 2: Settings -->
+        <div class="card">
+            <div class="card-title">
+                <span class="step-badge">2</span>
+                推理设置
+            </div>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <label class="setting-label">选择音频文件</label>
+                    <div style="display: flex; gap: 10px;">
+                        <select id="existingAudioSelect" style="flex: 1;">
+                            <option value="">-- 使用上传的新文件 --</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="refreshAudioList()" style="padding: 8px 16px;">🔄 刷新</button>
+                    </div>
+                    <span class="setting-description">选择已上传的音频文件重新推理，或上传新文件</span>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">导出格式</label>
+                    <select id="exportFormat">
+                        <option value="json">JSON (Blendshape Weights)</option>
+                        <option value="usd">USD (Geometry Cache)</option>
+                        <option value="emotions">JSON (Emotion Keys)</option>
+                    </select>
+                    <span class="setting-description">选择导出的动画数据格式</span>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">帧率 (FPS)</label>
+                    <input type="number" id="fps" value="25" min="1" max="120" step="1">
+                    <span class="setting-description">导出动画的帧率，默认25 FPS</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Process -->
+        <div class="card">
+            <div class="card-title">
+                <span class="step-badge">3</span>
+                生成并下载
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="processBtn" disabled>
+                    <span id="processBtnIcon">▶️</span>
+                    <span id="processBtnText">开始处理</span>
+                </button>
+                <button class="btn btn-secondary" id="downloadBtn" disabled>
+                    ⬇️ 下载结果
+                </button>
+            </div>
+
+            <div id="statusContainer" class="hidden"></div>
+            <div id="logsContainer" class="hidden">
+                <div class="logs" id="logs"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://127.0.0.1:8000/api/a2f';  // Audio2Face REST API (通过代理)
+        const SERVER_BASE = 'http://127.0.0.1:8000';  // File upload/download server
+        
+        // 服务器端路径将由后端 API 提供
+        let USD_FILE = null;
+        let EXPORT_DIR = null;
+        let a2fInstanceName = null;  // 从 GetInstances API 获取
+        
+        // State
+        let uploadedAudioFile = null;
+        let uploadedAudioPath = null;
+        let resultFilePath = null;
+        let resultFileName = null;
+        let isProcessing = false;
+
+        // Elements
+        const uploadArea = document.getElementById('uploadArea');
+        const audioFileInput = document.getElementById('audioFile');
+        const fileInfo = document.getElementById('fileInfo');
+        const processBtn = document.getElementById('processBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const statusContainer = document.getElementById('statusContainer');
+        const logsContainer = document.getElementById('logsContainer');
+        const logs = document.getElementById('logs');
+        const apiStatus = document.getElementById('apiStatus');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        // Initialize
+        async function init() {
+            // 从后端获取配置
+            try {
+                const configResponse = await fetch(`${SERVER_BASE}/api/config`);
+                if (configResponse.ok) {
+                    const config = await configResponse.json();
+                    USD_FILE = config.usd_file;
+                    EXPORT_DIR = config.export_dir;
+                    console.log('服务器配置已加载:', config);
+                } else {
+                    throw new Error('无法获取服务器配置');
+                }
+            } catch (error) {
+                console.error('加载配置失败:', error);
+                showStatus('error', '初始化失败', '无法从服务器获取配置信息');
+                return;
+            }
+            
+            // 检查API状态
+            checkAPIStatus();
+            setInterval(checkAPIStatus, 10000); // Check every 10s
+        }
+        
+        init(); // 启动初始化
+
+        // Refresh audio list from RootPath
+        async function refreshAudioList() {
+            if (!EXPORT_DIR) {
+                addLog('error', '请先等待配置加载完成');
+                return;
+            }
+
+            try {
+                addLog('info', '正在获取音频列表...');
+                
+                // Get player instances first
+                const instancesResponse = await fetch(`${API_BASE}/A2F/Player/GetInstances`);
+                if (!instancesResponse.ok) {
+                    throw new Error('获取播放器实例失败');
+                }
+                const instances = await instancesResponse.json();
+                
+                if (!instances.result || !instances.result.regular || instances.result.regular.length === 0) {
+                    throw new Error('未找到播放器实例');
+                }
+                
+                const playerInstance = instances.result.regular[0];
+                
+                // Set root path first
+                await fetch(`${API_BASE}/A2F/Player/SetRootPath`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        a2f_player: playerInstance,
+                        dir_path: EXPORT_DIR
+                    })
+                });
+                
+                // Get available tracks
+                const tracksResponse = await fetch(`${API_BASE}/A2F/Player/GetTracks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ a2f_player: playerInstance })
+                });
+                
+                if (!tracksResponse.ok) {
+                    throw new Error('获取音频列表失败');
+                }
+                
+                const tracks = await tracksResponse.json();
+                console.log('可用音频列表:', tracks);
+                
+                const select = document.getElementById('existingAudioSelect');
+                select.innerHTML = '<option value="">-- 使用上传的新文件 --</option>';
+                
+                if (tracks.result && tracks.result.length > 0) {
+                    tracks.result.forEach(track => {
+                        const option = document.createElement('option');
+                        option.value = track;
+                        option.textContent = track;
+                        select.appendChild(option);
+                    });
+                    addLog('success', `找到 ${tracks.result.length} 个音频文件`);
+                } else {
+                    addLog('info', '当前目录下没有音频文件');
+                }
+            } catch (error) {
+                addLog('error', `刷新音频列表失败: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        // Check API status
+        async function checkAPIStatus() {
+            try {
+                console.log('检查API状态:', API_BASE);
+                const response = await fetch(`${API_BASE}/status`);
+                console.log('API响应:', response.status, response.ok);
+                if (response.ok) {
+                    const data = await response.text();
+                    console.log('API数据:', data);
+                    statusDot.classList.add('connected');
+                    statusText.textContent = 'API已连接';
+                } else {
+                    statusDot.classList.remove('connected');
+                    statusText.textContent = `API连接失败 (${response.status})`;
+                }
+            } catch (error) {
+                console.error('API错误:', error);
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'API未运行: ' + error.message;
+            }
+        }
+
+        // Upload area click
+        uploadArea.addEventListener('click', () => {
+            audioFileInput.click();
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        // File input change
+        audioFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        // Handle file selection
+        function handleFileSelect(file) {
+            uploadedAudioFile = file;
+            uploadedAudioPath = null; // Will be set after upload
+            resultFilePath = null;
+            
+            // Clear existing audio selection
+            document.getElementById('existingAudioSelect').value = '';
+            
+            // Show file info
+            fileInfo.innerHTML = `
+                <div class="file-info">
+                    <div class="file-icon">🎵</div>
+                    <div class="file-details">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${formatFileSize(file.size)}</div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="clearFile()">✕ 移除</button>
+                </div>
+            `;
+            fileInfo.classList.remove('hidden');
+            uploadArea.classList.add('hidden');
+            processBtn.disabled = false;
+            downloadBtn.disabled = true;
+            
+            addLog('info', `已选择文件: ${file.name}`);
+        }
+        
+        // Handle existing audio selection
+        document.getElementById('existingAudioSelect').addEventListener('change', (e) => {
+            if (e.target.value) {
+                // Clear uploaded file
+                uploadedAudioFile = null;
+                uploadedAudioPath = null;
+                resultFilePath = null;
+                fileInfo.classList.add('hidden');
+                uploadArea.classList.remove('hidden');
+                audioFileInput.value = '';
+                processBtn.disabled = false;
+                downloadBtn.disabled = true;
+                addLog('info', `已选择音频: ${e.target.value}`);
+            }
+        });
+
+        // Clear file
+        function clearFile() {
+            uploadedAudioFile = null;
+            uploadedAudioPath = null;
+            resultFilePath = null;
+            fileInfo.classList.add('hidden');
+            uploadArea.classList.remove('hidden');
+            processBtn.disabled = true;
+            downloadBtn.disabled = true;
+            audioFileInput.value = '';
+            statusContainer.classList.add('hidden');
+            logsContainer.classList.add('hidden');
+            logs.innerHTML = '';
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        // Add log entry
+        function addLog(type, message) {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+            logsContainer.classList.remove('hidden');
+        }
+
+        // Show status
+        function showStatus(type, title, message) {
+            statusContainer.className = `status-box ${type}`;
+            statusContainer.innerHTML = `
+                <div class="status-title">
+                    ${type === 'loading' ? '<span class="spinner"></span>' : ''}
+                    ${title}
+                </div>
+                <div class="status-message">${message}</div>
+            `;
+            statusContainer.classList.remove('hidden');
+        }
+
+        // Process button click
+        processBtn.addEventListener('click', async () => {
+            const existingAudio = document.getElementById('existingAudioSelect').value;
+            if ((!uploadedAudioFile && !existingAudio) || isProcessing) {
+                if (!existingAudio && !uploadedAudioFile) {
+                    alert('请上传音频文件或选择已有音频');
+                }
+                return;
+            }
+
+            isProcessing = true;
+            processBtn.disabled = true;
+            downloadBtn.disabled = true;
+            
+            try {
+                addLog('info', '开始处理流程...');
+                showStatus('loading', '处理中...', '正在初始化Audio2Face推理');
+
+                // Step 1: Load USD file
+                addLog('info', 'Step 1: 加载USD文件...');
+                await loadUSD();
+
+                // Step 2: Upload audio and set track
+                addLog('info', 'Step 2: 上传音频文件...');
+                await uploadAndSetAudio();
+
+                // Step 3: Generate animation
+                addLog('info', 'Step 3: 生成面部动画...');
+                await generateAnimation();
+
+                // Step 4: Export results
+                addLog('info', 'Step 4: 导出结果...');
+                await exportResults();
+
+                // Success
+                showStatus('success', '✅ 处理完成!', '动画数据已生成,点击下载按钮获取结果文件');
+                addLog('success', '处理完成!可以下载结果了');
+                downloadBtn.disabled = false;
+
+            } catch (error) {
+                showStatus('error', '❌ 处理失败', error.message);
+                addLog('error', `错误: ${error.message}`);
+            } finally {
+                isProcessing = false;
+                processBtn.disabled = false;
+            }
+        });
+
+        // Step 1: Load USD
+        async function loadUSD() {
+            const response = await fetch(`${API_BASE}/A2F/USD/Load`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_name: USD_FILE })
+            });
+
+            if (!response.ok) {
+                throw new Error('加载USD文件失败');
+            }
+
+            addLog('success', 'USD文件加载成功');
+        }
+
+        // Step 2: Upload and set audio
+        async function uploadAndSetAudio() {
+            // Check if using existing audio
+            const existingAudio = document.getElementById('existingAudioSelect').value;
+            let audioFileName;
+            
+            if (existingAudio) {
+                // Using existing audio file
+                addLog('info', `使用已有音频: ${existingAudio}`);
+                audioFileName = existingAudio;
+            } else {
+                // Upload new file to server
+                if (!uploadedAudioFile) {
+                    throw new Error('请上传音频文件或选择已有音频');
+                }
+                
+                addLog('info', '正在上传音频文件到服务器...');
+                const formData = new FormData();
+                formData.append('file', uploadedAudioFile);
+                
+                const uploadResponse = await fetch(`${SERVER_BASE}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error('上传音频文件失败');
+                }
+
+                const uploadResult = await uploadResponse.json();
+                uploadedAudioPath = uploadResult.path;
+                audioFileName = uploadResult.filename;
+                addLog('success', `文件已上传: ${audioFileName}`);
+            }
+            
+            // Get player instances
+            addLog('info', '获取播放器实例...');
+            const instancesResponse = await fetch(`${API_BASE}/A2F/Player/GetInstances`);
+            if (!instancesResponse.ok) {
+                throw new Error('获取播放器实例失败');
+            }
+            const instances = await instancesResponse.json();
+            
+            // 详细调试日志
+            console.log('GetInstances 响应:', instances);
+            console.log('instances.result:', instances.result);
+            
+            // GetInstances 返回的 result 是对象 {regular: [], streaming: []}
+            if (!instances.result || !instances.result.regular || instances.result.regular.length === 0) {
+                throw new Error('未找到播放器实例');
+            }
+            
+            // 使用第一个 regular 播放器实例
+            const playerInstance = instances.result.regular[0];
+            console.log('playerInstance:', playerInstance);
+            
+            addLog('info', `找到 ${instances.result.regular.length} 个播放器实例`);
+            addLog('success', `使用播放器实例: ${playerInstance}`);
+            
+            // 保存A2F实例名用于后续操作
+            a2fInstanceName = playerInstance;
+
+            // Set audio root path (使用上传文件所在目录)
+            const audioDir = EXPORT_DIR;
+            const rootPathRequest = {
+                a2f_player: playerInstance,
+                dir_path: audioDir
+            };
+            console.log('rootPathRequest 对象:', rootPathRequest);
+            console.log('rootPathRequest JSON:', JSON.stringify(rootPathRequest));
+            addLog('info', `SetRootPath 请求: ${JSON.stringify(rootPathRequest)}`);
+            
+            const setRootResponse = await fetch(`${API_BASE}/A2F/Player/SetRootPath`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rootPathRequest)
+            });
+
+            if (!setRootResponse.ok) {
+                const errorText = await setRootResponse.text();
+                throw new Error(`设置音频根路径失败: ${errorText}`);
+            }
+
+            addLog('success', `音频根路径设置成功: ${audioDir}`);
+            
+            // Set the track with time range
+            const setTrackResponse = await fetch(`${API_BASE}/A2F/Player/SetTrack`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    a2f_player: playerInstance,
+                    file_name: audioFileName,
+                    time_range: [0, -1]  // -1 means end of audio
+                })
+            });
+
+            if (!setTrackResponse.ok) {
+                const errorText = await setTrackResponse.text();
+                throw new Error(`设置音频轨道失败: ${errorText}`);
+            }
+
+            addLog('success', '音频轨道设置成功');
+        }
+
+        // Step 3: Generate animation
+        async function generateAnimation() {
+            if (!a2fInstanceName) {
+                throw new Error('未找到A2F实例名称');
+            }
+
+            // Generate emotion keys (this triggers the inference)
+            const response = await fetch(`${API_BASE}/A2F/A2E/GenerateKeys`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    a2f_instance: a2fInstanceName
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('生成动画失败');
+            }
+
+            addLog('success', '面部动画生成成功');
+        }
+
+        // Step 4: Export results
+        async function exportResults() {
+            const exportFormat = document.getElementById('exportFormat').value;
+            const fps = parseInt(document.getElementById('fps').value) || 25;
+            
+            if (!a2fInstanceName) {
+                throw new Error('未找到A2F实例名称');
+            }
+            
+            // 使用音频文件名作为导出文件前缀
+            const existingAudio = document.getElementById('existingAudioSelect').value;
+            let audioBaseName;
+            if (existingAudio) {
+                audioBaseName = existingAudio.replace(/\.[^/.]+$/, '');  // 去掉扩展名
+            } else if (uploadedAudioFile) {
+                audioBaseName = uploadedAudioFile.name.replace(/\.[^/.]+$/, '');  // 去掉扩展名
+            } else {
+                throw new Error('无法确定音频文件名');
+            }
+            
+            let endpoint, requestBody, filename, expectedFileName;
+
+            if (exportFormat === 'json') {
+                // Export blendshapes
+                endpoint = `${API_BASE}/A2F/Exporter/ExportBlendshapes`;
+                filename = audioBaseName;  // 不加.json后缀，API会自动添加
+                
+                // Get blendshape solvers
+                addLog('info', '获取 BlendShape 解算器...');
+                const solversResponse = await fetch(`${API_BASE}/A2F/Exporter/GetBlendShapeSolvers`);
+                if (!solversResponse.ok) {
+                    throw new Error('获取BlendShape解算器失败');
+                }
+                
+                const solvers = await solversResponse.json();
+                addLog('info', `找到 ${solvers.result ? solvers.result.length : 0} 个解算器`);
+                
+                if (!solvers.result || solvers.result.length === 0) {
+                    throw new Error('未找到BlendShape解算器');
+                }
+
+                requestBody = {
+                    solver_node: solvers.result[0],
+                    export_directory: EXPORT_DIR,
+                    file_name: filename,
+                    format: 'json',
+                    batch: false,
+                    fps: fps
+                };
+                // API 会自动添加 _bsweight.json 后缀
+                expectedFileName = `${filename}_bsweight.json`;
+
+            } else if (exportFormat === 'emotions') {
+                // Export emotion keys
+                endpoint = `${API_BASE}/A2F/Exporter/ExportEmotionKeys`;
+                filename = audioBaseName;
+                requestBody = {
+                    a2f_instance: a2fInstanceName,
+                    export_directory: EXPORT_DIR,
+                    file_name: filename
+                };
+                expectedFileName = `${filename}.json`;  // 可能需要根据实际API行为调整
+
+            } else {
+                // Export geometry cache (USD)
+                endpoint = `${API_BASE}/A2F/Exporter/ExportGeometryCache`;
+                filename = audioBaseName;
+                requestBody = {
+                    export_directory: EXPORT_DIR,
+                    file_name: filename,
+                    start_frame: 0,
+                    end_frame: -1  // -1 means all frames
+                };
+                expectedFileName = `${filename}.usd`;
+            }
+
+            addLog('info', `导出参数: ${JSON.stringify(requestBody, null, 2)}`);
+            
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`导出结果失败: ${errorText}`);
+            }
+
+            resultFilePath = `${EXPORT_DIR}/${expectedFileName}`;
+            resultFileName = expectedFileName;
+            addLog('success', `结果已导出到: ${resultFilePath}`);
+            addLog('info', `下载文件名: ${expectedFileName}`);
+        }
+
+        // Download button click
+        downloadBtn.addEventListener('click', async () => {
+            if (!resultFileName) {
+                alert('没有可下载的结果文件');
+                return;
+            }
+
+            addLog('info', '开始下载结果文件...');
+            
+            try {
+                // Download file from server
+                const downloadUrl = `${SERVER_BASE}/api/download/${resultFileName}`;
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = resultFileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                addLog('success', `下载已开始: ${resultFileName}`);
+            } catch (error) {
+                addLog('error', `下载失败: ${error.message}`);
+                alert(`下载失败,文件路径: ${resultFilePath}\n您可以手动从服务器复制文件。`);
+            }
+        });
+    </script>
+</body>
+</html>
