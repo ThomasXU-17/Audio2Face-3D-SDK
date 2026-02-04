@@ -502,9 +502,9 @@
     </div>
 
     <script>
-        // Configuration
-        const API_BASE = 'http://127.0.0.1:8000/api/a2f';  // Audio2Face REST API (通过代理)
-        const SERVER_BASE = 'http://127.0.0.1:8000';  // File upload/download server
+        // Configuration - 使用当前访问的地址，支持局域网访问
+        const SERVER_BASE = window.location.origin;  // 动态获取服务器地址
+        const API_BASE = `${SERVER_BASE}/api/a2f`;  // Audio2Face REST API (通过代理)
         
         // 服务器端路径将由后端 API 提供
         let USD_FILE = null;
